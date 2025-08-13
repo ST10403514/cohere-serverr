@@ -3,18 +3,22 @@ import express from 'express';
 import cors from 'cors';
 import { CohereClient } from 'cohere-ai';
 import fs from 'fs/promises';
-import path from 'path';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Cohere API setup
 const cohere = new CohereClient({
   token: process.env.COHERE_API_KEY
 });
-// DO NOT CHANGE
+
+// File to store embeddings
 const EMBEDDINGS_FILE = './documents/embeddings.json';
 
+// -----------------
+// Utility functions
+// -----------------
 function cosineSimilarity(vecA, vecB) {
   const dotProduct = vecA.reduce((sum, a, idx) => sum + a * vecB[idx], 0);
   const magA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
@@ -31,7 +35,14 @@ function getTopKDocuments(queryEmbedding, documents, k = 5) {
   similarities.sort((a, b) => b.score - a.score);
   return similarities.slice(0, k).map(item => item.doc);
 }
-//upload YOUR OWN DOICUMENTS HERE
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// -----------------
+// Load documents & embeddings
+// -----------------
 async function loadDocuments() {
   const files = [
     './documents/tour_details.json',
@@ -42,8 +53,7 @@ async function loadDocuments() {
   ];
 
   const documents = [];
-//change to fit your documents
-  
+
   for (const file of files) {
     try {
       const content = await fs.readFile(file, 'utf-8');
@@ -112,10 +122,6 @@ async function loadDocuments() {
   return documents;
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 async function embedDocumentsInBatches(documents, batchSize = 96) {
   const allEmbeddings = [];
 
@@ -130,7 +136,7 @@ async function embedDocumentsInBatches(documents, batchSize = 96) {
     });
 
     allEmbeddings.push(...response.embeddings);
-    await sleep(10000);
+    await sleep(10000); // pause to respect API limits
   }
 
   return allEmbeddings;
@@ -187,6 +193,35 @@ async function initializeDocuments() {
 // Initialize on server start
 initializeDocuments();
 
+// -----------------
+// Dummy users for biometrics login
+// -----------------
+const users = [
+  { email: 'test@cohere.com', password: '123456' } // Add more test users here
+];
+
+// -----------------
+// API Routes
+// -----------------
+
+// Login endpoint
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Email and password are required' });
+  }
+
+  const user = users.find(u => u.email === email && u.password === password);
+
+  if (user) {
+    return res.json({ success: true, message: 'Login successful', token: 'dummy-token' });
+  } else {
+    return res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+});
+
+// Generate response using Cohere documents
 app.post('/generate', async (req, res) => {
   const { prompt } = req.body;
 
@@ -203,7 +238,6 @@ app.post('/generate', async (req, res) => {
     });
 
     const queryEmbedding = embedResponse.embeddings[0];
-
     const topDocuments = getTopKDocuments(queryEmbedding, cachedDocuments, 10);
 
     console.log(`Retrieved top ${topDocuments.length} documents.`);
@@ -214,7 +248,6 @@ app.post('/generate', async (req, res) => {
       documents: topDocuments.map(doc => ({
         text: `${doc.data.title}. ${doc.data.snippet}`
       })),
-      //CHANGE THIS TO FIT THE CONTEXT OG YOUR APP
       preamble: 'You are a professional and friendly expert travel assistant named Y-TravelBot, working for Y-Travels. You must answer the users questions using ONLY the information provided in the documents below whenever possible. If a topic is not covered by the documents, you may use your own knowledge — but ONLY in the domain of travel and tourism. Stay strictly within this domain: travel, countries, cities, attractions, history, geography, local cuisine, culture, and things to do. DO NOT provide information about politics, economics, safety advice, or unrelated topics. Always write in a helpful, engaging tone suitable for a travel website audience. If country or place not refered to in documents please tell user to click generate itinerary in the nav bar',
       temperature: 0.3
     });
@@ -232,6 +265,7 @@ app.post('/generate', async (req, res) => {
   }
 });
 
+// Generate holiday itinerary
 app.post('/holiday', async (req, res) => {
   const { userInput } = req.body;
 
@@ -249,6 +283,10 @@ app.post('/holiday', async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log('Listening on http://localhost:5000');
+// -----------------
+// Start server
+// -----------------
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Listening on http://localhost:${PORT}`);
 });
