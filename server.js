@@ -43,7 +43,7 @@ async function loadDocuments() {
 
   const documents = [];
 //change to fit your documents
-  /*
+  
   for (const file of files) {
     try {
       const content = await fs.readFile(file, 'utf-8');
@@ -102,7 +102,7 @@ async function loadDocuments() {
           });
         });
       }
-*/
+
     } catch (err) {
       console.error(`Error reading ${file}:`, err);
     }
